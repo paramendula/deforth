@@ -93,3 +93,25 @@ sys_exit:
   mov rax, 0x3c
   mov rdi, 0
   syscall
+
+word_key_exec:
+  push 0
+
+  mov rax, 0
+  mov rdi, 0
+  lea rsi, [rsp+7]
+  mov rdx, 1
+  syscall 
+
+  EXIT
+
+word_emit_exec:
+  mov rax, 1 
+  mov rdi, 1
+  lea rsi, [rsp+7]
+  mov rdx, 1
+  syscall
+
+  pop rax
+
+  EXIT
