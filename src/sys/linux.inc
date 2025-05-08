@@ -99,7 +99,7 @@ word_key_exec:
 
   mov rax, 0
   mov rdi, 0
-  lea rsi, [rsp+7]
+  lea rsi, BYTE [rsp]
   mov rdx, 1
   syscall 
 
@@ -108,7 +108,7 @@ word_key_exec:
 word_emit_exec:
   mov rax, 1 
   mov rdi, 1
-  lea rsi, [rsp+7]
+  lea rsi, BYTE [rsp]
   mov rdx, 1
   syscall
 
