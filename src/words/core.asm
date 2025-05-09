@@ -10,10 +10,13 @@
 
 section .data
 
-cfa_exit dq STUB_EXIT
-cfa_branch dq BRANCH
-cfa_literal dq LITERAL
-cfa_jump dq JUMP
+; Fake CFAs for ITC semantics
+itc_exit_cfa dq itc_exit
+itc_branch_cfa dq itc_branch
+itc_literal_cfa dq itc_literal
+itc_jump_cfa dq itc_jump
+
+; Words documentation: https://forth-standard.org/standard/core
 
 word_eq:
   dq 0
@@ -53,29 +56,40 @@ word_quit:
   db 4
   db "QUIT"
   align 8
-  word_quit_cfa dq STUB
+  word_quit_cfa dq next_stub
   ; THREADED CODE
 .loop:
   dq word_key_cfa
   dq word_dup_cfa
-  dq cfa_literal
+  dq itc_literal_cfa
   dq 'Q'
   dq word_eq_cfa
-  dq cfa_branch
+  dq itc_branch_cfa
   dq .if_false
   dq word_emit_cfa
-  dq cfa_jump
+  dq itc_jump_cfa
   dq .loop
 .if_false:
-  dq cfa_exit
+  dq itc_exit_cfa
 
 
 section .text
 
+
+
+word_store_exec:
+  pop rbx
+  pop rax
+  mov QWORD [rbx], rax
+  EXIT
+
+word_here_exec:
+  push r9
+  EXIT
+
 word_dup_exec:
   mov rax, QWORD [rsp]
   push rax
-
   EXIT
 
 word_eq_exec:
@@ -90,20 +104,24 @@ word_eq_exec:
   push -1
   EXIT
 
-; ITC handlers
+; ITC (Indirect Threaded Code) handlers
 
-STUB:
+; Used as ITC words' CFA (bootstraps the code by jumping to the first instruction)
+next_stub:
   NEXT
 
-STUB_EXIT:
+; Return from the current ITC word
+itc_exit:
   add rbp, 8
   mov r10, QWORD [rbp]
   add rbp, 8
 
   NEXT 
 
+; Pops a value from the data stack, if it's 0, works as itc_jump
+; otherwise skips the next item (located at r10+8) and continues execution
 ; ( DATA: f -- ) ( r10: 8+ADDR-IF-FALSE -- )
-BRANCH:
+itc_branch:
   mov r10, QWORD [rbp]
 
   pop rax
@@ -122,16 +140,18 @@ BRANCH:
   mov r10, QWORD [r10]
   jmp [r10]
 
+; Jumps to the address the next item in the array points at (located at r10+8)
 ; ( r10: 8+JUMP-ADDRESS )
-JUMP:
+itc_jump:
   mov r10, QWORD [rbp]
   mov r10, QWORD [r10+8]
   mov QWORD [rbp], r10
   mov r10, QWORD [r10]
   jmp [r10]
 
+; Pushes the next item in the array (located at r10+8) to the data stack
 ; (DATA : -- x ) ( r10: 8+VALUE -- )
-LITERAL:
+itc_literal:
   mov r10, QWORD [rbp]
   add rbp, 8
   add r10, 8
