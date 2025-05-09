@@ -1,3 +1,6 @@
+; core.asm - the most important primitives and INTERPRET are defined here
+; for the rest of Core wordset see core.fs, for Core-ext see core-ext.fs
+
 ; Word definition:
 ; 0-8:        Previous definition address
 ; 8-9:        Flags byte
@@ -8,11 +11,13 @@
 ;
 ; ^ 10+N % 8 == 0 
 
+FLAG_IMMEDIATE equ 1
+
 section .data
 
 ; Fake CFAs for ITC semantics
 itc_exit_cfa dq itc_exit
-itc_branch_cfa dq itc_branch
+itc_0branch_cfa dq itc_0branch
 itc_literal_cfa dq itc_literal
 itc_jump_cfa dq itc_jump
 
@@ -20,54 +25,87 @@ itc_jump_cfa dq itc_jump
 
 %define LASTWORD 0
 
+WORD store, "!"
 WORD mul,  "*"
 WORD eq,   "="
+WORD accept, "ACCEPT"
 WORD dup,  "DUP"
 WORD emit, "EMIT"
 WORD find, "FIND"
+WORD here, "HERE"
 WORD key,  "KEY"
-WORD quit, "QUIT", LASTWORD, next_stub
-  ; THREADED CODE
-.loop:
-  dq word_key_cfa
-  dq word_dup_cfa
-  dq itc_literal_cfa
-  dq 'Q'
-  dq word_eq_cfa
-  dq itc_branch_cfa
-  dq .if_false
-  dq word_emit_cfa
-  dq itc_jump_cfa
-  dq .loop
-.if_false:
-  dq itc_exit_cfa
 
+
+; Auxiliary macros
+; (Please be ware of registers you pass to them, I haven't checked all possible cases)
+
+; FIND <in reg c-addr> <in|out reg latest_addr> <out reg result>
+; addr should point to a counted string
+; latest_addr should be a valid word pointer
+; three registers should be different
+; you can't use these registers:
+;   addr: rsi, rdi, rcx
+;   latest_addr: rsi, rdi, rcx
+; Return:
+; addr is left unchanged
+; latest_addr points to the word (if found)
+; result: 0 if not found; 1 if immediate, otherwise -1
+; Example: FIND rax, rbx, rdx
+; rsi, rdi, ecx are changed
+%macro FIND 3
+  %%loop:
+    mov rsi, %1
+    mov cl, BYTE [rsi]
+    lea rdi, [%2+9]
+    repe cmpsb
+    jz %%found
+    mov %2, QWORD [%2]
+    cmp %2, 0
+    je %%not_found
+    jmp %%loop
+  %%found:
+    movzx %3, BYTE [%2+8]
+    and %3, FLAG_IMMEDIATE
+    jnz %%end
+    mov %3, -1
+    jmp %%end
+  %%not_found:
+    mov %3, 0
+  %%end:
+%endmacro
+
+; ACCEPT <in reg c-addr> <in|out reg +n>
+; c-addr and +n can't be the same
+; c-addr will be changed if it's rdi
+; rdi, rdx, rcx, rax are changed
+%macro ACCEPT 2
+  %ifnidni %1, rdi
+    mov rdi, %1
+  %endif
+  %ifnidni %2, rdx
+    mov rdx, %2
+  %endif
+  %ifnidni %2, rcx
+    mov rcx, %2
+  %endif
+  %%loop:
+    cmp rcx, 0
+    je %%end
+    SYS_READ_KEY rax
+    ; TODO: errorcheck
+    cmp rax, CR
+    je %%end
+    mov BYTE [rdi], al
+    inc rdi
+    jmp %%loop
+  %%end:
+  sub rdx, rcx
+  %ifnidni %2, rdx
+    mov %2, rdx
+  %endif
+%endmacro
 
 section .text
-
-word_find_exec:
-  
-  EXIT
-
-word_mul_exec:
-  pop rcx
-  pop rax
-  imul rcx
-  push rax
-
-  EXIT
-
-word_key_exec:
-  SYS_READ_KEY
-  push rax
-
-  EXIT
-
-word_emit_exec:
-  pop rax
-  SYS_WRITE_CHAR
-
-  EXIT
 
 word_store_exec:
   pop rbx
@@ -75,12 +113,10 @@ word_store_exec:
   mov QWORD [rbx], rax
   EXIT
 
-word_here_exec:
-  push r9
-  EXIT
-
-word_dup_exec:
-  mov rax, QWORD [rsp]
+word_mul_exec:
+  pop rcx
+  pop rax
+  imul rcx
   push rax
   EXIT
 
@@ -89,11 +125,53 @@ word_eq_exec:
   pop rdx
   cmp rax, rdx
   je .true
-
   push 0
   EXIT
 .true:
   push -1
+  EXIT
+
+word_accept_exec:
+  pop rdx
+  pop rdi
+  ACCEPT rdi, rdx
+  push rdx
+  EXIT
+
+word_dup_exec:
+  mov rax, QWORD [rsp]
+  push rax
+  EXIT
+
+word_emit_exec:
+  mov rsi, rsp
+  SYS_WRITE_KEY rsi
+  pop rax
+  EXIT
+
+word_here_exec:
+  push r9
+  EXIT
+
+word_find_exec: 
+  mov rax, QWORD [rsp]
+  mov rbx, r8
+  FIND rax, rbx, rdx
+  cmp rdx, 0
+  je .end
+  pop rax
+  movzx rax, BYTE [rax]
+  add rbx, rax
+  add rbx, 9
+  push rbx
+.end:
+  push rdx
+  EXIT
+
+word_key_exec:
+  push 0
+  mov rsi, rsp
+  SYS_READ_KEY rsi
   EXIT
 
 ; ITC (Indirect Threaded Code) handlers
@@ -113,7 +191,7 @@ itc_exit:
 ; Pops a value from the data stack, if it's 0, works as itc_jump
 ; otherwise skips the next item (located at r10+8) and continues execution
 ; ( DATA: f -- ) ( r10: 8+ADDR-IF-FALSE -- )
-itc_branch:
+itc_0branch:
   mov r10, QWORD [rbp]
 
   pop rax

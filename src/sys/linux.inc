@@ -97,23 +97,25 @@ sys_exit:
   mov rdi, 0
   syscall
 
-; key -> rax
-%macro SYS_READ_KEY 0
+; key -> BYTE [%1]
+%macro SYS_READ_KEY 1
+  %ifnidni %1, rsi
+    mov rsi, %1 
+  %endif
   mov rax, 0
   mov rdi, 0
-  mov rsi, temp_buffer
   mov rdx, 1
   syscall
   ; TODO: errorcheck
-  mov rax, [temp_buffer]
 %endmacro
 
-; print rax
-%macro SYS_WRITE_CHAR 0
-  mov BYTE [temp_buffer], al
+; emit BYTE [%1]
+%macro SYS_WRITE_KEY 1
+  %ifnidni %1, rsi
+    mov rsi, %1 
+  %endif
   mov rax, 1
   mov rdi, 1
-  mov rsi, temp_buffer
   mov rdx, 1
   syscall
   ; TODO: erorcheck

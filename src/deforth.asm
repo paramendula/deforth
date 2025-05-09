@@ -8,26 +8,40 @@ return_stack_start resb 1024
 return_stack_cap equ $ - return_stack_start
 return_stack_end equ return_stack_start + return_stack_cap
 
+stack_start resq 1
+
+; default input buffer
 input_buffer resb 256
 input_buffer_cap equ $ - input_buffer
 
 
 section .data
 
-state db 0 ; 0 - interpret, -1 - compile
-base db 10 ; curret number conversion radix
+blob_corefs incbin "words/core.fs"
+blob_corefs_len equ $ - blob_corefs
+blob_core_extfs incbin "words/core-ext.fs"
+blob_core_extfs_len equ $ - blob_core_extfs
 
-; System cleanup, indirected for ITC semantics
-sys_exit_cfa dq sys_exit
+CR equ '\n'
+SPACE equ ' '
 
-; Fake ITC (indirect threaded code) for bootstrapping DEForth and then properly exiting
-forth_init:
-  dq word_quit_cfa
-  dq sys_exit_cfa
+; variables
+state   db 0 ; 0 - interpret, -1 - compile
+base    db 10 ; current number conversion radix
+source  dq input_buffer
+source_len dq 0
+; >IN
+source_in dq 0
+
+; For now, it will lie here
+WORD bye, "BYE"
 
 
 section .text
   global _start
+
+word_bye_exec:
+  jmp sys_exit
 
 _start:
   call sys_init
@@ -35,10 +49,11 @@ _start:
 
 init:
   ; Data stack is set up by default (rsp)
+  ; Saving it for DEPTH and probably for underflow checks
+  mov [stack_start], rsp
 
   ; Setup the return stack (rbp)
-  mov rbp, return_stack_end-8
-  mov QWORD [rbp], forth_init+8
+  mov rbp, return_stack_end
 
   ; LATEST is stored in the r8 register
   ; LASTWORD is first defined in words/core.asm, each WORD macro usage updates it
@@ -50,6 +65,7 @@ init:
 
   ; r10 is used as the current ITC instruction pointer
 
-  ; Enter the interpretation loop
-  mov r10, forth_init-8
-  NEXT
+  ; TODO:
+  ; INTERPRET core.fs and core-ext.fs (file.fs in the future?)
+  ; call word_quit_exec
+  jmp sys_exit
