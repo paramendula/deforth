@@ -15,3 +15,24 @@
 
   NEXT
 %endmacro
+
+; WORD base_name base_string link_value exec_token
+%macro WORD 2-4
+  word_%1:
+    %if %0 > 2
+      dq %3
+    %else
+      dq LASTWORD
+    %endif
+    db %strlen(%2)
+    db %2
+    align 8
+    word_%1_cfa:
+      %if %0 == 4
+        dq %4
+      %else
+        dq word_%1_exec
+      %endif
+
+    %define LASTWORD word_%1
+%endmacro

@@ -40,6 +40,10 @@ init:
   mov rbp, return_stack_end-8
   mov QWORD [rbp], forth_init+8
 
+  ; LATEST is stored in the r8 register
+  ; LASTWORD is first defined in words/core.asm, each WORD macro usage updates it
+  mov r8, LASTWORD
+
   ; HERE is stored in the r9 register (Data space)
   ; data_space_start is defined and set in sys/linux.inc
   mov r9, QWORD [data_space_start]

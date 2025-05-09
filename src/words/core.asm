@@ -18,45 +18,15 @@ itc_jump_cfa dq itc_jump
 
 ; Words documentation: https://forth-standard.org/standard/core
 
-word_eq:
-  dq 0
-  db 0
-  db 1
-  db "="
-  align 8
-  word_eq_cfa dq word_eq_exec
+%define LASTWORD 0
 
-word_dup:
-  dq 0
-  db 0
-  db 3
-  db "DUP"
-  align 8
-  word_dup_cfa dq word_dup_exec
-
-word_emit:
-  dq 0
-  db 0
-  db 4
-  db "EMIT"
-  align 8
-  word_emit_cfa dq word_emit_exec
-
-word_key:
-  dq word_emit
-  db 0
-  db 3
-  db "KEY"
-  align 8
-  word_key_cfa dq word_key_exec
-
-word_quit:
-  dq word_key
-  db 0
-  db 4
-  db "QUIT"
-  align 8
-  word_quit_cfa dq next_stub
+WORD mul,  "*"
+WORD eq,   "="
+WORD dup,  "DUP"
+WORD emit, "EMIT"
+WORD find, "FIND"
+WORD key,  "KEY"
+WORD quit, "QUIT", LASTWORD, next_stub
   ; THREADED CODE
 .loop:
   dq word_key_cfa
@@ -75,7 +45,29 @@ word_quit:
 
 section .text
 
+word_find_exec:
+  
+  EXIT
 
+word_mul_exec:
+  pop rcx
+  pop rax
+  imul rcx
+  push rax
+
+  EXIT
+
+word_key_exec:
+  SYS_READ_KEY
+  push rax
+
+  EXIT
+
+word_emit_exec:
+  pop rax
+  SYS_WRITE_CHAR
+
+  EXIT
 
 word_store_exec:
   pop rbx

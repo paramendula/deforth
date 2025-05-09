@@ -3,6 +3,9 @@ section .bss
 data_space_start resq 1
 data_space_end resq 1
 
+temp_buffer resb 16
+temp_buffer_cap equ $ - temp_buffer
+
 ; 60 BYTES (struct termios)
 linux_termios:
   linux_termios_iflag resb 4  ; 0-4
@@ -94,24 +97,24 @@ sys_exit:
   mov rdi, 0
   syscall
 
-word_key_exec:
-  push 0
-
+; key -> rax
+%macro SYS_READ_KEY 0
   mov rax, 0
   mov rdi, 0
-  lea rsi, BYTE [rsp]
-  mov rdx, 1
-  syscall 
-
-  EXIT
-
-word_emit_exec:
-  mov rax, 1 
-  mov rdi, 1
-  lea rsi, BYTE [rsp]
+  mov rsi, temp_buffer
   mov rdx, 1
   syscall
+  ; TODO: errorcheck
+  mov rax, [temp_buffer]
+%endmacro
 
-  pop rax
-
-  EXIT
+; print rax
+%macro SYS_WRITE_CHAR 0
+  mov BYTE [temp_buffer], al
+  mov rax, 1
+  mov rdi, 1
+  mov rsi, temp_buffer
+  mov rdx, 1
+  syscall
+  ; TODO: erorcheck
+%endmacro
