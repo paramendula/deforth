@@ -28,51 +28,18 @@ itc_jump_cfa dq itc_jump
 WORD store, "!"
 WORD mul,  "*"
 WORD eq,   "="
+WORD toin, ">IN"
 WORD accept, "ACCEPT"
 WORD dup,  "DUP"
 WORD emit, "EMIT"
 WORD find, "FIND"
 WORD here, "HERE"
 WORD key,  "KEY"
+WORD source, "SOURCE"
 
 
 ; Auxiliary macros
 ; (Please be ware of registers you pass to them, I haven't checked all possible cases)
-
-; FIND <in reg c-addr> <in|out reg latest_addr> <out reg result>
-; addr should point to a counted string
-; latest_addr should be a valid word pointer
-; three registers should be different
-; you can't use these registers:
-;   addr: rsi, rdi, rcx
-;   latest_addr: rsi, rdi, rcx
-; Return:
-; addr is left unchanged
-; latest_addr points to the word (if found)
-; result: 0 if not found; 1 if immediate, otherwise -1
-; Example: FIND rax, rbx, rdx
-; rsi, rdi, ecx are changed
-%macro FIND 3
-  %%loop:
-    mov rsi, %1
-    mov cl, BYTE [rsi]
-    lea rdi, [%2+9]
-    repe cmpsb
-    jz %%found
-    mov %2, QWORD [%2]
-    cmp %2, 0
-    je %%not_found
-    jmp %%loop
-  %%found:
-    movzx %3, BYTE [%2+8]
-    and %3, FLAG_IMMEDIATE
-    jnz %%end
-    mov %3, -1
-    jmp %%end
-  %%not_found:
-    mov %3, 0
-  %%end:
-%endmacro
 
 ; ACCEPT <in reg c-addr> <in|out reg +n>
 ; c-addr and +n can't be the same
@@ -105,6 +72,59 @@ WORD key,  "KEY"
   %endif
 %endmacro
 
+; FIND <in reg c-addr> <in|out reg latest_addr> <out reg result>
+; addr should point to a counted string
+; latest_addr should be a valid word pointer
+; three registers should be different
+; you can't use these registers:
+;   addr: rsi, rdi, rcx
+;   latest_addr: rsi, rdi, rcx
+; Return:
+; addr is left unchanged
+; latest_addr points to the word (if found)
+; result: 0 if not found; 1 if immediate, otherwise -1
+; Example: FIND rax, rbx, rdx
+; rsi, rdi, ecx are changed
+%macro FIND 3
+  CLD
+  %%loop:
+    mov rsi, %1
+    mov cl, BYTE [rsi]
+    lea rdi, [%2+9]
+    repe cmpsb
+    jz %%found
+    mov %2, QWORD [%2]
+    cmp %2, 0
+    je %%not_found
+    jmp %%loop
+  %%found:
+    movzx %3, BYTE [%2+8]
+    and %3, FLAG_IMMEDIATE
+    jnz %%end
+    mov %3, -1
+    jmp %%end
+  %%not_found:
+    mov %3, 0
+  %%end:
+%endmacro
+
+; macro for the WORD word
+; CWORD <out reg c-addr> <out reg count> <out reg new_toin>
+; c-addr points to counted string in a transient memory region (HERE)
+; count is the found word's length
+; new_toin is next >IN (set reg to r12 if you want to update it)
+%macro CWORD 3
+  ; Skip leading spaces
+  mov al, SPACE
+  LEA rdi, [source+r12]
+  mov rcx, source_len
+  sub rcx, r12
+  CLD
+  REPE scasb
+  mov rsi, rdi
+  mov rdx, rdi
+%endmacro
+
 section .text
 
 word_store_exec:
@@ -129,6 +149,11 @@ word_eq_exec:
   EXIT
 .true:
   push -1
+  EXIT
+
+word_toin_exec:
+  mov rax, source_in
+  push rax
   EXIT
 
 word_accept_exec:
@@ -172,6 +197,13 @@ word_key_exec:
   push 0
   mov rsi, rsp
   SYS_READ_KEY rsi
+  EXIT
+
+word_source_exec:
+  mov rax, source
+  push rax
+  mov rax, [source_len]
+  push rax
   EXIT
 
 ; ITC (Indirect Threaded Code) handlers

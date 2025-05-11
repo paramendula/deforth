@@ -65,6 +65,9 @@ init:
 
   ; r10 is used as the current ITC instruction pointer
 
+  ; r12 contains >IN
+  mov r12, 0
+
   ; TODO:
   ; INTERPRET core.fs and core-ext.fs (file.fs in the future?)
   ; call word_quit_exec
