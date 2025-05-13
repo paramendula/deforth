@@ -108,21 +108,34 @@ WORD source, "SOURCE"
   %%end:
 %endmacro
 
-; macro for the WORD word
-; CWORD <out reg c-addr> <out reg count> <out reg new_toin>
-; c-addr points to counted string in a transient memory region (HERE)
+; macro for the WORD, PARSE and PARSE-NAME words
+; GWORD <in reg|const char> <out reg c-start> <out reg count>
+; char must contain in it's lowest byte the delimiter
+; c-addr points to the benning of the found word (in SOURCE)
 ; count is the found word's length
-; new_toin is next >IN (set reg to r12 if you want to update it)
-%macro CWORD 3
-  ; Skip leading spaces
-  mov al, SPACE
+; if count == 0 then c-start is unchanged
+; all registers should be different
+; c-start can't be rdi and rax
+%macro GWORD 3
+  ; Skip leading chars
+  %ifnidni %1, rax
+    mov rax, %1
+  %endif
   LEA rdi, [source+r12]
   mov rcx, source_len
   sub rcx, r12
   CLD
   REPE scasb
-  mov rsi, rdi
-  mov rdx, rdi
+  ; If start not found, jump out
+  cmp rcx, 0
+  je %%done
+  ; Save the start
+  mov %2, rdi
+  ; Search for word's end (find SPACE)
+  REPNE scasb
+%%done: 
+  mov %3, rdi
+  sub %3, %2
 %endmacro
 
 section .text
