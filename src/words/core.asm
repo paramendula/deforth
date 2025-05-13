@@ -29,6 +29,7 @@ WORD store, "!"
 WORD mul,  "*"
 WORD eq,   "="
 WORD toin, ">IN"
+WORD tonumber, ">NUMBER"
 WORD accept, "ACCEPT"
 WORD dup,  "DUP"
 WORD emit, "EMIT"
@@ -36,6 +37,7 @@ WORD find, "FIND"
 WORD here, "HERE"
 WORD key,  "KEY"
 WORD source, "SOURCE"
+WORD word, "WORD"
 
 
 ; Auxiliary macros
@@ -108,7 +110,7 @@ WORD source, "SOURCE"
   %%end:
 %endmacro
 
-; macro for the WORD, PARSE and PARSE-NAME words
+; General macro for the WORD, PARSE and PARSE-NAME words
 ; GWORD <in reg|const char> <out reg c-start> <out reg count>
 ; char must contain in it's lowest byte the delimiter
 ; c-addr points to the benning of the found word (in SOURCE)
@@ -116,6 +118,7 @@ WORD source, "SOURCE"
 ; if count == 0 then c-start is unchanged
 ; all registers should be different
 ; c-start can't be rdi and rax
+; rax, rdi, rcx are changed
 %macro GWORD 3
   ; Skip leading chars
   %ifnidni %1, rax
@@ -137,6 +140,153 @@ WORD source, "SOURCE"
   mov %3, rdi
   sub %3, %2
 %endmacro
+
+; CWORD (CORE WORD) macro
+; CWORD (in reg char) (opt out reg len)
+; r9(HERE) will point to a counted string
+; char must contain in it's lowest byte the delimiter
+; len is not zero if a word is found
+; len can't be rax, rsi or rcx
+; rax, rsi and rcx are changed
+%macro CWORD 1-2
+  %ifnidni %1, rax
+    mov rax, %1
+  %endif
+  GWORD rax, rsi, rcx
+  %if %0 > 1
+    mov %1, rcx
+  %endif
+  mov BYTE [rsi], cl
+  inc rsi
+  mov rdi, r9
+  CLD
+  rep movsb
+%endmacro
+
+; WITIHN <in reg|const b1> <in reg|const b2> <in|out reg num>
+; num is not zero if b1 <= num <= b2
+%macro WITHIN 3
+  cmp %3, %1
+  jl %%bad
+  cmp %3, %2
+  jg %%bad
+  %%bad:
+    mov %3, 0
+  %%end:
+%endmacro
+
+; NLOWER <in|out reg char>
+; adds 'a' - 'A' to char
+%macro NLOWER 1
+  add %1, ('a' - 'A')
+%endmacro
+
+; NUPPER <in|out reg char>
+; removes 'a' - 'A' from char
+%macro NUPPER 1
+  sub %1, ('a' - 'A')
+%endmacro
+
+; ISLOWER <in reg char> <out reg result>
+; result is not zero is char is within 'a-z'
+%macro ISLOWER 2
+  mov %2, %1
+  WITHIN 'a', 'z', %2
+%endmacro
+
+; ISUPPER <in reg char> <out reg result>
+; result is not zero is char is within 'A-Z'
+%macro ISUPPER 2
+  mov %2, %1
+  WITHIN 'A', 'Z', %2
+%endmacro
+
+; ISALPHA <in reg char> <out reg result>
+; result is not zero is char is within 'a-z' or 'A-Z'
+%macro ISALPHA 2
+  ISUPPER %1, %2
+  cmp %2, 0
+  jne %%done
+  mov %2, 1
+  ISLOWER %1, %2
+%%done:
+%endmacro
+
+; ISDIGIT <in reg char> <out reg result>
+; result is not zero is char is within '0-9'
+%macro ISDIGIT 2
+  mov %2, %1
+  WITHIN '0', '9', %2
+%endmacro
+
+; LOWER <in|out reg char> <reg buffer>
+; if char is A-Z converts it to a-z
+; buffer is needed and changed (can't be equal to char)
+%macro LOWER 2
+  ISUPPER %1, %2
+  cmp %2, 0
+  je %%done
+  NLOWER %1
+%%done:
+%endmacro
+
+; UPPER <in|out reg char> <reg buffer>
+; if char is a-z converts it to A-Z
+; buffer is needed and changed (can't be equal to char)
+%macro UPPER 2
+  ISLOWER %1, %2
+  cmp %2, 0
+  je %%done
+  NUPPER %1
+%%done:
+%endmacro
+
+; TONUMBER <in|out reg ud1:low> <in|out reg ud1:high> <in|out reg c-addr> <in|out reg count> <in reg base>
+; converts c-aligned string
+; rax, rdx, rbx, r15 is changed
+; Example: TONUMBER rax, rdx, rsi, rcx, r13
+%macro TONUMBER 5
+  %ifnidni %1, rax
+    mov rax, %1
+  %endif
+  %ifnidni %2, rdx
+    mov rdx, %2
+  %endif
+  xor rbx, rbx
+%%loop:
+  cmp %4, 0
+  je %%end
+  mov bl, BYTE [%3]
+  cmp rbx, '9'
+  jg %%nondec
+  cmp rbx, '0'
+  jl %%end
+  sub rbx, '0'
+  jmp %%next
+%%nondec:
+  mov r15, rbx
+  WITHIN 'A', 'Z', r15
+  cmp r15, 0
+  jne %%next
+  mov r15, rbx
+  WITHIN 'a', 'z', r15
+  cmp r15, 0
+  jne %%end
+  NUPPER rbx
+  sub rbx, 'A'-10
+%%next:
+  cmp rbx, %5
+  jge %%end
+  mul %5
+  ; Add to rdx:rax
+  add rax, rbx
+  adc rdx, 0
+  inc %3
+  dec %4
+  jmp %%loop
+%%end:
+%endmacro
+
 
 section .text
 
@@ -167,6 +317,19 @@ word_eq_exec:
 word_toin_exec:
   mov rax, source_in
   push rax
+  EXIT
+
+word_tonumber_exec:
+  pop rcx
+  pop rsi
+  pop rdx
+  pop rax
+  mov r13, QWORD [base]
+  TONUMBER rax, rdx, rsi, rcx, r13
+  push rax
+  push rdx
+  push rsi
+  push rcx
   EXIT
 
 word_accept_exec:
@@ -217,6 +380,12 @@ word_source_exec:
   push rax
   mov rax, [source_len]
   push rax
+  EXIT
+
+word_word_exec:
+  pop rax
+  CWORD rax
+  push r9
   EXIT
 
 ; ITC (Indirect Threaded Code) handlers
