@@ -271,3 +271,34 @@
   jmp %%loop
 %%end:
 %endmacro
+
+; TODIGIT <in|out reg digit>
+%macro TODIGIT 1
+  cmp %1, 10
+  jl %%end
+  add %1, 'A'-'0'-10
+%%end:
+  add %1, '0'
+%endmacro
+
+; INVERSE_STR <in reg c-addr> <in reg count>
+; c-addr is changed
+; changes rax, rdx, rdi
+%macro INVERSE_STR 2
+  cmp %2, 0
+  je %%end
+  mov rdi, %1
+  add rdi, %2
+  dec rdi
+%%loop:
+  cmp %1, rdi
+  je %%end
+  mov al, BYTE [%1]
+  mov dl, BYTE [rdi]
+  mov BYTE [%1], dl
+  mov BYTE [rdi], al
+  inc %1
+  dec rdi
+  jmp %%loop
+%%end:
+%endmacro
