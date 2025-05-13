@@ -12,3 +12,5 @@
    ENDCASE
   REPEAT BYE
 ;
+
+: . DUP ABS 0 <# #S ROT SIGN #> TYPE SPACE ;

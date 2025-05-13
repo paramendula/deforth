@@ -31,6 +31,7 @@ WORD store, "!"
 WORD ns, "#"
 WORD ns_great, "#>"
 WORD ns_sign, "#S"
+WORD tick, "'"
 WORD mul,  "*"
 WORD eq,   "="
 WORD ns_less, "<#"
@@ -46,7 +47,16 @@ WORD key,  "KEY"
 WORD rfrom, "R>"
 WORD rfetch, "R@"
 WORD source, "SOURCE"
+WORD sign, "SIGN"
 WORD word, "WORD"
+WORD lbr, "[", FLAG_IMMEDIATE
+WORD rbr, "]", FLAG_IMMEDIATE
+
+
+; core-ext
+
+WORD refill, "REFILL"
+WORD source_id, "SOURCE-ID"
 
 section .text
 
@@ -61,20 +71,65 @@ word_ns_exec:
   pop rdx
   pop rax
   div r15
-  ; TODO: convert and write
+  TODIGIT rdx
+
+  RET_POP rdi
+  mov BYTE [rdi], dl
+  inc rdi
+  RET_PUSH rdi
+
+  push rax
+  push 0
   EXIT
 
 word_ns_great_exec:
-  ; TODO: reverse string
+  add rsp, 16 ; drop xd
   RET_POP rax ; current
   RET_POP rbx ; begin
   sub rax, rbx
+  mov rcx, rax
+  mov rsi, rbx
+  INVERSE_STR rsi, rcx
   push rbx
   push rax
   EXIT
 
 word_ns_sign_exec:
-  ; TODO: pop and write
+  mov r15, QWORD [base]
+  pop rdx
+  pop rax
+  RET_POP rdi
+.loop:
+  mov rcx, rax
+  or rcx, rdx
+  cmp rcx, 0
+  je .end
+
+  div r15
+  TODIGIT rdx
+
+  mov BYTE [rdi], dl
+  inc rdi
+
+  xor rdx, rdx ; clean from remainder
+  jmp .loop
+.end:
+  push 0
+  push 0
+  RET_PUSH rdi
+  EXIT
+
+word_tick_exec:
+  mov rax, SPACE
+  CWORD rax
+  mov rbx, r8 ; LASTWORD
+  FIND r9, r8, rcx
+  cmp rcx, 0
+  je .end
+  ; TODO: error handling
+  WORD_XT rbx
+  push rbx
+.end:
   EXIT
 
 word_mul_exec:
@@ -184,10 +239,43 @@ word_source_exec:
   push rax
   EXIT
 
+word_sign_exec:
+  pop rax
+  cmp rax, 0
+  je .done
+  mov rax, -2 ; '-' - 2 = '+'
+.done:
+  add rax, '-'
+  RET_POP rdi
+  mov BYTE [rdi], al
+  inc rdi
+  RET_PUSH rdi
+  EXIT
+
 word_word_exec:
   pop rax
   CWORD rax
   push r9
+  EXIT
+
+word_lbr_exec:
+  mov QWORD [state], 0
+  EXIT
+
+word_rbr_exec:
+  mov QWORD [state], 1
+  EXIT
+
+; core-ext exec
+
+word_refill_exec:
+  REFILL rax
+  push rax
+  EXIT
+
+word_source_id_exec:
+  mov rax, QWORD [source_id]
+  push rax
   EXIT
 
 ; ITC (Indirect Threaded Code) handlers
@@ -198,11 +286,10 @@ next_stub:
 
 ; Return from the current ITC word
 itc_exit:
-  add rbp, 8
-  mov r10, QWORD [rbp]
-  add rbp, 8
+  RET_POP r10 ; currently we're at ITC word's level, calling NEXT would be a mistake
+  add rbp, 8 ; now we are it's caller's level
 
-  NEXT 
+  NEXT ; call caller's next instruction
 
 ; Pops a value from the data stack, if it's 0, works as itc_jump
 ; otherwise skips the next item (located at r10+8) and continues execution

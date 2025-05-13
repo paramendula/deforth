@@ -24,6 +24,7 @@
     je %%end
     mov BYTE [rdi], al
     inc rdi
+    dec rcx
     jmp %%loop
   %%end:
   sub rdx, rcx
@@ -50,7 +51,8 @@
   %%loop:
     mov rsi, %1
     mov cl, BYTE [rsi]
-    lea rdi, [%2+9]
+    inc rcx
+    lea rdi, [WORD_NAMELEN(%2)]
     repe cmpsb
     jz %%found
     mov %2, QWORD [%2]
@@ -58,7 +60,7 @@
     je %%not_found
     jmp %%loop
   %%found:
-    movzx %3, BYTE [%2+8]
+    movzx %3, BYTE [WORD_FLAGS(%2)]
     and %3, FLAG_IMMEDIATE
     jnz %%end
     mov %3, -1
@@ -68,7 +70,26 @@
   %%end:
 %endmacro
 
-; General macro for the WORD, PARSE and PARSE-NAME words
+; WORD_XT <in|out reg x-addr>
+; x-addr should point to a word definition
+; result: x-addr points to word's execution token (xt)
+; x-addr can't be: rax, rcx, rdx
+; rax, rbx, rcx, rdx are changed
+%macro WORD_XT 1
+  mov rax, [WORD_NAMELEN(%1)]
+  mov rcx, rax
+  xor rdx, rdx
+  mov rbx, 8
+  div rbx
+  ; get align
+  mov rax, 8
+  sub rax, rdx
+  lea rdx, [WORD_NAME(%1)+rax] ; offset(10) + align(?)
+  add rdx, rcx                 ; + name length (?) = x-addr(xt)
+  mov %1, rdx
+%endmacro
+
+; General macro for the WORD, PARSE, PARSE-NAME and so on words
 ; GWORD <in reg|const char> <out reg c-start> <out reg count>
 ; char must contain in it's lowest byte the delimiter
 ; c-addr points to the benning of the found word (in SOURCE)
@@ -95,6 +116,8 @@
   ; Search for word's end (find SPACE)
   REPNE scasb
 %%done: 
+  mov r12, source
+  sub r12, rcx ; change >IN
   mov %3, rdi
   sub %3, %2
 %endmacro
@@ -301,4 +324,23 @@
   dec rdi
   jmp %%loop
 %%end:
+%endmacro
+
+; REFILL <out reg flag>
+; flag 0 if no input available
+%macro REFILL 1
+  mov rax, [source_id]
+  cmp rax, 0
+  jne %%bad ; if we're reading from string
+  mov rdi, source ; input_buffer, no difference
+  mov rcx, input_buffer_cap
+  ACCEPT rdi, rcx
+  mov QWORD [source_len], rcx
+  mov r12, 0 ; >IN
+
+  mov %1, -1
+  jmp %%done
+%%bad:
+  mov %1, 0
+%%done:
 %endmacro

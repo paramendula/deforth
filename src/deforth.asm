@@ -32,6 +32,7 @@ source  dq input_buffer
 source_len dq 0
 ; >IN
 source_in dq 0
+source_id dq 0 ; 0 - user input (stdin), -1 - string
 
 ; For now, it will lie here
 WORD bye, "BYE"
