@@ -89,6 +89,36 @@
   mov %1, rdx
 %endmacro
 
+; CHARFIND <in reg|const char> <in reg|const c-addr> <in reg|const max> <out reg count>
+; find index of char first occurence in c-addr
+; count is -1 if char wasn't found
+; rax, rdx, rcx, rdi are changed
+%macro CHARFIND 4
+  %ifnidni %3, rcx
+    mov rcx, %3
+  %endif
+  %ifnidni %3, rdx
+    mov rdx, %3
+  %endif
+  %ifnidni %2, rdi
+    mov rdi, %2
+  %endif
+  %ifnidni %1, rax
+    mov rax, %1
+  %endif
+  repne scasb
+  jne %%notfound
+  %ifnidni %4, rdx
+    mov %4, rdx
+  %endif
+  sub %4, rcx
+  dec %4
+  jmp %%end
+%%notfound:
+  mov %4, -1
+%%end:
+%endmacro
+
 ; General macro for the WORD, PARSE, PARSE-NAME and so on words
 ; GWORD <in reg|const char> <out reg c-start> <out reg count>
 ; char must contain in it's lowest byte the delimiter
@@ -118,6 +148,7 @@
 %%done: 
   mov r12, source
   sub r12, rcx ; change >IN
+  mov QWORD [source_in], r12
   mov %3, rdi
   sub %3, %2
 %endmacro

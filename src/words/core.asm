@@ -32,6 +32,7 @@ WORD ns, "#"
 WORD ns_great, "#>"
 WORD ns_sign, "#S"
 WORD tick, "'"
+WORD paren, '('
 WORD mul,  "*"
 WORD eq,   "="
 WORD ns_less, "<#"
@@ -130,6 +131,16 @@ word_tick_exec:
   WORD_XT rbx
   push rbx
 .end:
+  EXIT
+
+word_paren_exec:
+  lea r13, [source+r12]
+  mov r14, [source_len]
+  sub r14, r12
+  dec r14
+  CHARFIND ')', r13, r14, rdx
+  add r12, rdx
+  mov QWORD [source_in], r12
   EXIT
 
 word_mul_exec:
@@ -286,8 +297,9 @@ next_stub:
 
 ; Return from the current ITC word
 itc_exit:
-  RET_POP r10 ; currently we're at ITC word's level, calling NEXT would be a mistake
-  add rbp, 8 ; now we are it's caller's level
+  ; currently we're at ITC word's level, calling NEXT would be a mistake
+  RET_POP r10 ; return to the caller
+  ; now we are at it's caller's level
 
   NEXT ; call caller's next instruction
 

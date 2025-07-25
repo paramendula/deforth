@@ -8,33 +8,37 @@ return_stack_start resb 1024
 return_stack_cap equ $ - return_stack_start
 return_stack_end equ return_stack_start + return_stack_cap
 
+; Pointer to the beginning of the stack (goes down)
 stack_start resq 1
 
-; default input buffer
+; Default input buffer
 input_buffer resb 256
 input_buffer_cap equ $ - input_buffer
+input_buffer_end equ input_buffer + input_buffer_cap
 
 
 section .data
 
+; This should probably be redone
+; Put some emergent CORE and CORE-EXT sources into the binary
 blob_corefs incbin "words/core.fs"
 blob_corefs_len equ $ - blob_corefs
 blob_core_extfs incbin "words/core-ext.fs"
 blob_core_extfs_len equ $ - blob_core_extfs
 
 CR equ '\n'
-SPACE equ ' '
+SPACE equ ' ' ; BL
 
 ; variables
 state   db 0 ; 0 - interpret, -1 - compile
 base    db 10 ; current number conversion radix
-source  dq input_buffer
+source  dq input_buffer ; current source
 source_len dq 0
 ; >IN
 source_in dq 0
 source_id dq 0 ; 0 - user input (stdin), -1 - string
 
-; For now, it will lie here
+; For now, it will stay here
 WORD bye, "BYE"
 
 
@@ -47,6 +51,13 @@ word_bye_exec:
 _start:
   call sys_init
   jmp init
+
+; rsp - data stack
+; rbp - return stack
+; r8 - LATEST
+; r9 - HERE
+; r10 - current ITC instruction
+; r12 - >IN
 
 init:
   ; Data stack is set up by default (rsp)
