@@ -1,3 +1,3 @@
 # DEForth
 
-Work in progress
+Publicly archived, for now.
